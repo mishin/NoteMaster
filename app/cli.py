@@ -133,7 +133,7 @@ def cmd_list(args: argparse.Namespace, manager: NoteManager) -> int:
 
     section(f"Заметки: {len(notes)}")
     print(render_notes_table(notes))
-    muted("ID показан сокращённо; для команд подходит полный id или уникальный префикс.")
+    muted("В командах используйте номер из колонки #, полный id или уникальный префикс.")
     return 0
 
 
@@ -275,12 +275,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.set_defaults(handler=cmd_list)
 
     p_show = sub.add_parser("show", aliases=["get"], help="показать заметку по id")
-    p_show.add_argument("id", help="id заметки или уникальный префикс")
+    p_show.add_argument("id", help="номер из списка, полный id или уникальный префикс")
     p_show.add_argument("--json", action="store_true", help="вывести в формате JSON")
     p_show.set_defaults(handler=cmd_show)
 
     p_edit = sub.add_parser("edit", aliases=["update"], help="изменить заметку")
-    p_edit.add_argument("id", help="id заметки или уникальный префикс")
+    p_edit.add_argument("id", help="номер из списка, полный id или уникальный префикс")
     p_edit.add_argument("-t", "--title", default=None, help="новый заголовок")
     p_edit.add_argument("-c", "--content", default=None, help="новый текст")
     p_edit.add_argument(
@@ -299,7 +299,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_edit.set_defaults(handler=cmd_edit)
 
     p_delete = sub.add_parser("delete", aliases=["remove"], help="удалить заметку")
-    p_delete.add_argument("id", help="id заметки или уникальный префикс")
+    p_delete.add_argument("id", help="номер из списка, полный id или уникальный префикс")
     p_delete.add_argument("-y", "--yes", action="store_true", help="без подтверждения")
     p_delete.set_defaults(handler=cmd_delete)
 

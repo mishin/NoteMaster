@@ -279,7 +279,8 @@ def ask_attachments(
     allow_keep=False: пустой ввод — пустой список (режим создания).
     """
     if allow_keep:
-        muted(f"  Текущие вложения: {format_attachments(current or [])}")
+        shown = ", ".join(current) if current else "(нет)"
+        muted(f"  Текущие вложения: {shown}")
         hint = "Вложения через запятую [Enter — оставить, '-' — очистить]: "
     else:
         hint = "Вложения через запятую (Enter — пропустить): "
@@ -307,20 +308,52 @@ def confirm(prompt: str, *, default: bool = False, input_func: InputFunc = input
         warning("Ответьте 'y' (да) или 'n' (нет).")
 
 
-def resolve_note_id(notes: Iterable[Note], raw_id: str) -> str:
-    """Полный id или уникальный префикс -> полный id.
+#: Номер строки из колонки «#»: 2, #2, [2].
+_ROW_NUMBER_RE = re.compile(r"^\d+$")
 
-    Минимизирует ввод: в таблице id показан сокращённо, и этого достаточно,
-    пока префикс однозначен.
+
+def _strip_reference(raw: str) -> str:
+    """Убирает оформление ссылки на заметку: [2], (2), #2, [07c4be12]."""
+    value = (raw or "").strip()
+    if len(value) >= 2 and value[0] in "[(" and value[-1] in "])":
+        value = value[1:-1].strip()
+    if value.startswith("#"):
+        value = value[1:].strip()
+    return value
+
+
+def resolve_note_id(notes: Iterable[Note], raw_id: str) -> str:
+    """Приводит ссылку пользователя к полному id заметки.
+
+    Поддерживаются, в порядке приоритета:
+        1. полный id;
+        2. номер строки из колонки «#» (нумерация с 1), в том числе `#2` и `[2]`;
+        3. уникальный префикс id (как в таблице — 8 символов).
+
+    Номер удобнее, но он привязан к текущему порядку списка; команда всегда
+    печатает полный id, поэтому подмену легко заметить.
     """
-    value = (raw_id or "").strip()
+    value = _strip_reference(raw_id)
     if not value:
-        raise InputError("Укажите id заметки.")
+        raise InputError("Укажите id или номер заметки из списка.")
 
     candidates = list(notes)
+    if not candidates:
+        raise InputError("Список заметок пуст — выбирать не из чего.")
+
     exact = next((note for note in candidates if note.id == value), None)
     if exact is not None:
         return exact.id
+
+    if _ROW_NUMBER_RE.fullmatch(value):
+        number = int(value)
+        if 1 <= number <= len(candidates):
+            return candidates[number - 1].id
+        available = "1" if len(candidates) == 1 else f"1–{len(candidates)}"
+        raise InputError(
+            f"Номер {number} вне диапазона: в списке {len(candidates)} заметок, "
+            f"доступны номера {available}."
+        )
 
     matches = [note for note in candidates if note.id.startswith(value)]
     if len(matches) == 1:
@@ -330,4 +363,7 @@ def resolve_note_id(notes: Iterable[Note], raw_id: str) -> str:
             f"id {value!r} неоднозначен: подходит заметок — {len(matches)}. "
             "Введите больше символов."
         )
-    raise InputError(f"Заметка с id={value!r} не найдена.")
+    raise InputError(
+        f"Заметка {value!r} не найдена. Укажите номер из колонки #, "
+        "полный id или уникальный префикс."
+    )

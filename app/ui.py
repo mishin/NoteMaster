@@ -34,13 +34,14 @@ logger = logging.getLogger(__name__)
 InputFunc = Callable[[str], str]
 
 PROMPT = "NoteMaster> "
+ID_PROMPT = "номер или id заметки"
 
 HELP_ROWS: tuple[tuple[str, str], ...] = (
     ("add", "создать заметку (пошаговый ввод)"),
     ("list", "показать все заметки"),
-    ("show [id]", "показать заметку"),
-    ("edit [id]", "изменить заметку (Enter — оставить поле)"),
-    ("delete [id]", "удалить заметку с подтверждением"),
+    ("show [N|id]", "показать заметку"),
+    ("edit [N|id]", "изменить заметку (Enter — оставить поле)"),
+    ("delete [N|id]", "удалить заметку с подтверждением"),
     ("help", "показать эту справку"),
     ("exit", "выйти из интерактивного режима"),
 )
@@ -70,8 +71,9 @@ ALIASES: dict[str, str] = {
 def print_help() -> None:
     section("Команды")
     for name, description in HELP_ROWS:
-        print(f"  {name:<12} {description}")
-    muted("Подсказка: id можно указывать сокращённо — достаточно уникального префикса.")
+        print(f"  {name:<14} {description}")
+    muted("N — номер из колонки # в списке (например: show 2, delete 3).")
+    muted("Вместо номера можно указать полный id или уникальный префикс.")
 
 
 def _print_banner(manager: NoteManager) -> None:
@@ -103,7 +105,8 @@ def list_notes(manager: NoteManager) -> list[Note]:
 
     section(f"Заметки: {len(notes)}")
     print(render_notes_table(notes))
-    muted("ID показан сокращённо; для команд подходит уникальный префикс.")
+    muted("В командах используйте номер из колонки # (например: show 2).")
+    muted("Также подходит полный id или уникальный префикс.")
     return notes
 
 
@@ -118,7 +121,7 @@ def show_note_interactive(
         warning("Заметок пока нет — показывать нечего.")
         return None
 
-    raw_id = note_id or ask_text("id заметки", input_func=input_func)
+    raw_id = note_id or ask_text(ID_PROMPT, input_func=input_func)
     resolved = resolve_note_id(notes, raw_id)
     note = manager.get_note_by_id(resolved)
     if note is None:
@@ -139,7 +142,7 @@ def edit_note_interactive(
         warning("Заметок нет — редактировать нечего.")
         return None
 
-    raw_id = note_id or ask_text("id заметки", input_func=input_func)
+    raw_id = note_id or ask_text(ID_PROMPT, input_func=input_func)
     resolved = resolve_note_id(notes, raw_id)
     note = manager.get_note_by_id(resolved)
     if note is None:
@@ -187,7 +190,7 @@ def delete_note_interactive(
         warning("Заметок нет — удалять нечего.")
         return None
 
-    raw_id = note_id or ask_text("id заметки", input_func=input_func)
+    raw_id = note_id or ask_text(ID_PROMPT, input_func=input_func)
     resolved = resolve_note_id(notes, raw_id)
     note = manager.get_note_by_id(resolved)
     if note is None:

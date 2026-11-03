@@ -125,6 +125,35 @@ class CLITestCase(unittest.TestCase):
         self.assertIn(note.id, out)
         self.assertIn("Префикс", out)
 
+    def test_show_by_row_number(self) -> None:
+        self.manager().create_note("Первая")
+        second = self.manager().create_note("Вторая")
+
+        code, out, _ = self.run_cli("show", "2")
+
+        self.assertEqual(code, 0)
+        self.assertIn(second.id, out)
+        self.assertIn("Вторая", out)
+
+    def test_show_by_row_number_out_of_range(self) -> None:
+        self.manager().create_note("Единственная")
+
+        code, _, err = self.run_cli("show", "5")
+
+        self.assertEqual(code, 2)
+        self.assertIn("вне диапазона", err)
+
+    def test_delete_by_row_number(self) -> None:
+        first = self.manager().create_note("Первая")
+        second = self.manager().create_note("Вторая")
+
+        code, out, _ = self.run_cli("delete", "1", "--yes")
+
+        self.assertEqual(code, 0)
+        self.assertIn(first.id, out)
+        remaining = self.manager().get_all_notes()
+        self.assertEqual([note.id for note in remaining], [second.id])
+
     def test_show_unknown_id(self) -> None:
         self.manager().create_note("Есть")
 
@@ -243,6 +272,49 @@ class ConsoleHelpersTest(unittest.TestCase):
         self.assertIn("a.txt, b.txt", table)
         self.assertRegex(table, r"\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}")
 
+    def test_resolve_accepts_row_number(self) -> None:
+        notes = [
+            Note(id="aaaa1111-0000-0000-0000-000000000000", title="1"),
+            Note(id="bbbb2222-0000-0000-0000-000000000000", title="2"),
+            Note(id="cccc3333-0000-0000-0000-000000000000", title="3"),
+        ]
+
+        self.assertEqual(resolve_note_id(notes, "1"), notes[0].id)
+        self.assertEqual(resolve_note_id(notes, "3"), notes[2].id)
+
+    def test_resolve_accepts_decorated_row_number(self) -> None:
+        notes = [
+            Note(id="aaaa1111-0000-0000-0000-000000000000", title="1"),
+            Note(id="bbbb2222-0000-0000-0000-000000000000", title="2"),
+        ]
+
+        for raw in ("2", "[2]", "#2", " (2) "):
+            with self.subTest(raw=raw):
+                self.assertEqual(resolve_note_id(notes, raw), notes[1].id)
+
+    def test_resolve_rejects_row_number_out_of_range(self) -> None:
+        notes = [
+            Note(id="aaaa1111-0000-0000-0000-000000000000", title="1"),
+            Note(id="bbbb2222-0000-0000-0000-000000000000", title="2"),
+        ]
+
+        for raw in ("0", "3", "99"):
+            with self.subTest(raw=raw), self.assertRaises(InputError) as ctx:
+                resolve_note_id(notes, raw)
+            self.assertIn("вне диапазона", str(ctx.exception))
+
+    def test_resolve_exact_id_wins_over_row_number(self) -> None:
+        notes = [
+            Note(id="aaaa1111-0000-0000-0000-000000000000", title="1"),
+            Note(id="2", title="id совпадает с номером"),
+        ]
+
+        self.assertEqual(resolve_note_id(notes, "2"), "2")
+
+    def test_resolve_rejects_empty_storage(self) -> None:
+        with self.assertRaises(InputError):
+            resolve_note_id([], "1")
+
     def test_resolve_exact_and_unique_prefix(self) -> None:
         notes = [
             Note(id="aaaa1111-0000-0000-0000-000000000000", title="1"),
@@ -323,6 +395,79 @@ class UITestCase(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("Неизвестная команда", out)
         self.assertIn("delete", out)
+
+    def test_show_by_row_number(self) -> None:
+        self.manager.create_note("Первая")
+        second = self.manager.create_note("Вторая")
+
+        code, out, _ = self.run_ui(["show", "2", "exit"])
+
+        self.assertEqual(code, 0)
+        self.assertIn(second.id, out)
+        self.assertIn("Вторая", out)
+
+    def test_show_by_decorated_number(self) -> None:
+        self.manager.create_note("Первая")
+        second = self.manager.create_note("Вторая")
+
+        code, out, _ = self.run_ui(["show [2]", "exit"])
+
+        self.assertEqual(code, 0)
+        self.assertIn(second.id, out)
+
+    def test_show_prompts_with_number_hint(self) -> None:
+        note = self.manager.create_note("Заметка")
+        prompts: list[str] = []
+        values = iter(["show", "1", "exit"])
+
+        def fake_input(prompt: str = "") -> str:
+            prompts.append(prompt)
+            try:
+                return next(values)
+            except StopIteration as exc:
+                raise EOFError from exc
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = ui.run(self.manager, input_func=fake_input)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(
+            any("номер или id" in prompt for prompt in prompts),
+            msg=f"prompts={prompts}",
+        )
+        self.assertIn(note.id, out.getvalue())
+
+    def test_edit_by_row_number(self) -> None:
+        first = self.manager.create_note("Первая")
+        second = self.manager.create_note("Вторая")
+
+        code, out, _ = self.run_ui(["edit", "2", "Новая", "", "", "exit"])
+
+        self.assertEqual(code, 0)
+        self.assertIn("Заметка обновлена", out)
+        self.assertEqual(self.manager.get_note_by_id(first.id).title, "Первая")  # type: ignore[union-attr]
+        self.assertEqual(self.manager.get_note_by_id(second.id).title, "Новая")  # type: ignore[union-attr]
+
+    def test_delete_by_row_number(self) -> None:
+        first = self.manager.create_note("Первая")
+        second = self.manager.create_note("Вторая")
+
+        code, out, _ = self.run_ui(["delete", "1", "y", "exit"])
+
+        self.assertEqual(code, 0)
+        self.assertIn("удалена", out.lower())
+        remaining = self.manager.get_all_notes()
+        self.assertEqual([note.id for note in remaining], [second.id])
+        self.assertIsNone(self.manager.get_note_by_id(first.id))
+
+    def test_out_of_range_number_keeps_session(self) -> None:
+        self.manager.create_note("Единственная")
+
+        code, _, err = self.run_ui(["show", "9", "exit"])
+
+        self.assertEqual(code, 0)
+        self.assertIn("вне диапазона", err)
 
     def test_invalid_id_does_not_stop_session(self) -> None:
         self.manager.create_note("Есть")
