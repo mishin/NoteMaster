@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+# Логи приложения (раскомментируйте при необходимости)
+# *.app.log
+
+# Данные пользователя (создаются ядром при первом запуске)
+data/
+# Чтобы закоммитить начальный файл вместо игнорирования,
+# раскомментируйте строку ниже и удалите строку выше:
+# !data/notes.json
