@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ note.title }} — NoteMaster{% endblock %}
+
+{% block content %}
+{% set form_mode = 'edit' %}
+{% set form_open = false %}
+
+<a href="{{ url_for('index') }}" class="back-link">&larr; Назад к заметкам</a>
+
+<article class="note-detail">
+    <header class="note-detail__header">
+        <h1>{{ note.title }}</h1>
+        <time class="note-detail__time" datetime="{{ note.timestamp }}">
+            Создана: {{ format_timestamp(note.timestamp) }}
+        </time>
+    </header>
+
+    {% if note.content %}
+    <div class="note-detail__content">
+        {{ note.content }}
+    </div>
+    {% else %}
+    <p class="note-detail__empty">Заметка пустая.</p>
+    {% endif %}
+
+    {% if note.attachments %}
+    <section class="note-detail__attachments">
+        <h3>Вложения</h3>
+        <ul>
+            {% for attachment in note.attachments %}
+            <li class="chip chip--file">{{ attachment }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    <footer class="note-detail__footer">
+        <code class="note-detail__id">id: {{ note.id }}</code>
+    </footer>
+
+    <div class="note-detail__actions">
+        <button type="button" class="btn btn--primary" data-toggle-form="edit-form">
+            <span class="btn__icon">&#9998;</span> Редактировать
+        </button>
+        <form action="{{ url_for('delete_note', note_id=note.id) }}" method="post"
+              class="inline-form" data-confirm="Удалить эту заметку?">
+            <button type="submit" class="btn btn--danger">
+                <span class="btn__icon">&#128465;</span> Удалить
+            </button>
+        </form>
+    </div>
+</article>
+
+{% include "partials/form.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (location.hash === '#edit') {
+        var panel = document.getElementById('edit-form');
+        if (panel) panel.removeAttribute('hidden');
+    }
+});
+</script>
+{% endblock %}

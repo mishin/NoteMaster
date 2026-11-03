@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Заметки — NoteMaster{% endblock %}
+
+{% block content %}
+{% set form_mode = 'add' %}
+{% set form_open = form is not none or notes|length == 0 %}
+
+<div class="toolbar">
+    <h2>Заметки <span class="toolbar__count">({{ notes|length }})</span></h2>
+    <button class="btn btn--primary btn--lg" id="add-btn">
+        <span class="btn__icon">+</span> Добавить заметку
+    </button>
+</div>
+
+{% if not notes %}
+<div class="empty-state">
+    <div class="empty-state__icon">&#128221;</div>
+    <h3>Заметок пока нет</h3>
+    <p>Нажмите кнопку выше, чтобы создать первую заметку.</p>
+</div>
+{% endif %}
+
+{% include "partials/form.html" %}
+
+<div class="notes-grid">
+    {% for note in notes %}
+    <article class="note-card" data-note-id="{{ note.id }}">
+        <div class="note-card__header">
+            <h3 class="note-card__title"><a href="{{ url_for('note_view', note_id=note.id) }}">{{ note.title }}</a></h3>
+            <time class="note-card__time" datetime="{{ note.timestamp }}">
+                {{ format_timestamp(note.timestamp) }}
+            </time>
+        </div>
+
+        {% if note.content %}
+        <p class="note-card__excerpt">{{ note.content[:180] }}</p>
+        {% endif %}
+
+        {% if note.attachments %}
+        <div class="note-card__attachments">
+            {% for attachment in note.attachments %}
+            <span class="chip chip--file">{{ attachment }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="note-card__actions">
+            <a href="{{ url_for('note_view', note_id=note.id) }}" class="btn btn--ghost">
+                Открыть
+            </a>
+            <a href="{{ url_for('note_view', note_id=note.id) }}#edit" class="btn btn--outline btn--sm">
+                Редактировать
+            </a>
+            <form action="{{ url_for('delete_note', note_id=note.id) }}" method="post"
+                  class="inline-form" data-confirm="Удалить эту заметку?">
+                <button type="submit" class="btn btn--danger btn--sm">
+                    Удалить
+                </button>
+            </form>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% endblock %}
