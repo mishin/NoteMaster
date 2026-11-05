@@ -39,7 +39,14 @@
         {% if note.attachments %}
         <div class="note-card__attachments">
             {% for attachment in note.attachments %}
-            <span class="chip chip--file">{{ attachment }}</span>
+            {% set meta = attachment_meta(attachment) %}
+            <a class="chip chip--file{% if not meta.available %} chip--missing{% endif %}"
+               href="{{ meta.url }}"
+               target="_blank"
+               rel="noopener"
+               title="{{ meta.name }} — открыть предпросмотр">
+                <span class="chip__icon">{{ meta.icon }}</span>{{ meta.label }}
+            </a>
             {% endfor %}
         </div>
         {% endif %}

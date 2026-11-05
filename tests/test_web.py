@@ -17,17 +17,28 @@ from pathlib import Path
 import tests  # noqa: F401  — корень проекта в sys.path
 
 from app.core import NoteManager
-from web.app import create_app, parse_attachments
+from web.app import (
+    attachment_kind,
+    create_app,
+    human_size,
+    safe_attachment_name,
+    split_attachments,
+)
 
 
 class WebTestCase(unittest.TestCase):
-    """Общая фикстура: временное хранилище и тестовый клиент Flask."""
+    """Общая фикстура: временное хранилище, каталог вложений и тестовый клиент."""
 
     def setUp(self) -> None:
         self._dir = tempfile.TemporaryDirectory()
         self.addCleanup(self._dir.cleanup)
         self.storage = Path(self._dir.name) / "notes.json"
-        self.app = create_app(storage_path=self.storage, secret_key="test-secret")
+        self.attachments = Path(self._dir.name) / "attachments"
+        self.app = create_app(
+            storage_path=self.storage,
+            secret_key="test-secret",
+            attachments_dir=self.attachments,
+        )
         self.client = self.app.test_client()
 
     # ------------------------------------------------------------- helpers
@@ -96,14 +107,6 @@ class IndexViewTest(WebTestCase):
         _, html = self.body("/")
 
         self.assertIn("(2)", html)
-
-    def test_attachment_chips_rendered(self) -> None:
-        self.add_note(title="С файлами", attachments="a.txt, b.png")
-
-        _, html = self.body("/")
-
-        self.assertIn("a.txt", html)
-        self.assertIn("b.png", html)
 
     def test_html_is_escaped(self) -> None:
         self.add_note(title="<script>alert(1)</script>")
@@ -183,19 +186,6 @@ class AddNoteTest(WebTestCase):
 
         self.assertEqual(self.stored()[0].attachments, ["photo.png"])
 
-    def test_upload_and_text_field_merge_without_duplicates(self) -> None:
-        self.client.post(
-            "/add",
-            data={
-                "title": "Микс",
-                "attachments": "a.txt, photo.png",
-                "attachment_files": (BytesIO(b"data"), "photo.png"),
-            },
-            content_type="multipart/form-data",
-        )
-
-        self.assertEqual(self.stored()[0].attachments, ["a.txt", "photo.png"])
-
 
 class NoteViewTest(WebTestCase):
     """GET /note/<id>."""
@@ -256,14 +246,6 @@ class EditNoteTest(WebTestCase):
         self.client.post(f"/edit/{note_id}", data={"title": "Заметка", "content": "", "attachments": ""})
 
         self.assertEqual(self.stored()[0].content, "")
-
-    def test_attachments_can_be_cleared(self) -> None:
-        note_id = self.add_note(title="Заметка", attachments="a.txt")
-        self.dismiss_flash()
-
-        self.client.post(f"/edit/{note_id}", data={"title": "Заметка", "content": "", "attachments": ""})
-
-        self.assertEqual(self.stored()[0].attachments, [])
 
     def test_timestamp_is_not_changed(self) -> None:
         note_id = self.add_note(title="Заметка")
@@ -407,19 +389,194 @@ class ErrorPagesTest(WebTestCase):
         self.assertIn("Метод не поддерживается", self.html(response))
 
 
-class ParseAttachmentsTest(unittest.TestCase):
-    """Разбор поля вложений веб-слоя."""
+class SplitAttachmentsTest(unittest.TestCase):
+    """Служебные функции веб-слоя для вложений."""
 
     def test_splits_and_deduplicates(self) -> None:
-        self.assertEqual(parse_attachments("a.txt, b.png; a.txt"), ["a.txt", "b.png"])
+        self.assertEqual(split_attachments("a.txt, b.png; a.txt"), ["a.txt", "b.png"])
 
     def test_strips_quotes_and_blanks(self) -> None:
-        self.assertEqual(parse_attachments(' "a.txt" , , b.txt '), ["a.txt", "b.txt"])
+        self.assertEqual(split_attachments(' "a.txt" , , b.txt '), ["a.txt", "b.txt"])
 
     def test_empty_input(self) -> None:
-        self.assertEqual(parse_attachments(""), [])
-        self.assertEqual(parse_attachments("   "), [])
-        self.assertEqual(parse_attachments(","), [])
+        self.assertEqual(split_attachments(""), [])
+        self.assertEqual(split_attachments("   "), [])
+        self.assertEqual(split_attachments(","), [])
+
+    def test_fakepath_and_windows_separators_are_cut(self) -> None:
+        self.assertEqual(safe_attachment_name("C:\fakepath\отчёт.pdf"), "отчёт.pdf")
+        self.assertEqual(safe_attachment_name("/tmp/dir/photo.png"), "photo.png")
+
+    def test_forbidden_symbols_are_replaced(self) -> None:
+        self.assertEqual(safe_attachment_name('a<b>:c"|d?.txt'), "a_b__c__d_.txt")
+        self.assertEqual(safe_attachment_name("   "), "")
+
+    def test_kind_by_extension_is_case_insensitive(self) -> None:
+        self.assertEqual(attachment_kind("report.PDF"), "pdf")
+        self.assertEqual(attachment_kind("photo.PNG"), "image")
+        self.assertEqual(attachment_kind("notes.md"), "text")
+        self.assertEqual(attachment_kind("archive.zip"), "archive")
+        self.assertEqual(attachment_kind("no_extension"), "other")
+
+    def test_human_size(self) -> None:
+        self.assertEqual(human_size(512), "512 Б")
+        self.assertEqual(human_size(2048), "2.0 КБ")
+        self.assertEqual(human_size(1536 * 1024), "1.5 МБ")
+
+
+class AttachmentPreviewTest(WebTestCase):
+    """GET /attachment/<имя> — файл отдаётся браузеру для предпросмотра."""
+
+    def upload(self, name: str, payload: bytes = b"data") -> None:
+        self.client.post(
+            "/add",
+            data={"title": "Файл", "attachment_files": (BytesIO(payload), name)},
+            content_type="multipart/form-data",
+        )
+
+    def test_uploaded_file_is_stored_in_attachments_dir(self) -> None:
+        self.upload("plan.pdf", b"%PDF-1.4")
+
+        saved = self.attachments / "plan.pdf"
+        self.assertTrue(saved.is_file(), "выбранный файл должен лежать в каталоге вложений")
+        self.assertEqual(saved.read_bytes(), b"%PDF-1.4")
+        self.assertEqual(self.stored()[0].attachments, ["plan.pdf"])
+
+    def test_preview_is_inline_not_attachment(self) -> None:
+        self.upload("plan.pdf", b"%PDF-1.4")
+
+        response = self.client.get("/attachment/plan.pdf")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/pdf")
+        disposition = response.headers.get("Content-Disposition", "")
+        self.assertIn("inline", disposition)
+        self.assertNotIn("attachment;", disposition)
+        self.assertEqual(response.get_data(), b"%PDF-1.4")
+
+    def test_text_preview_declares_utf8(self) -> None:
+        self.upload("записка.md", "строка с кириллицей".encode("utf-8"))
+
+        response = self.client.get("/attachment/" + urllib.parse.quote("записка.md"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("charset=utf-8", response.headers["Content-Type"])
+
+    def test_image_preview_keeps_content_type(self) -> None:
+        self.upload("shot.png", b"\x89PNG\r\n\x1a\n")
+
+        response = self.client.get("/attachment/shot.png")
+
+        self.assertEqual(response.mimetype, "image/png")
+        self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+
+    def test_missing_file_shows_ui_error_not_raw_text(self) -> None:
+        response = self.client.get("/attachment/ghost.pdf")
+
+        self.assertEqual(response.status_code, 404)
+        html = self.html(response)
+        self.assertIn("Файл не найден", html)
+        self.assertIn("error-page", html)
+
+    def test_path_traversal_is_not_served(self) -> None:
+        self.storage.write_text("[]", encoding="utf-8")
+
+        for candidate in ("..%2Fnotes.json", "notes.json", "..%2F..%2Fnotes.json"):
+            with self.subTest(path=candidate):
+                response = self.client.get(f"/attachment/{candidate}")
+                self.assertEqual(response.status_code, 404)
+                self.assertNotIn("Заметка", self.html(response))
+
+    def test_absolute_path_from_core_is_previewable(self) -> None:
+        outside = Path(self._dir.name) / "вне-каталога.txt"
+        outside.write_text("значение", encoding="utf-8")
+        NoteManager(storage_path=self.storage).create_note(
+            "Из CLI", "Текст", [str(outside)]
+        )
+
+        _, html = self.body(f"/note/{self.stored()[0].id}")
+        link = re.search(r'href="(/attachment/[^"]+)"', html)
+        self.assertIsNotNone(link, "в карточке должна быть ссылка на предпросмотр")
+
+        response = self.client.get(link.group(1))  # type: ignore[union-attr]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_data(as_text=True), "значение")
+
+    def test_note_view_renders_attachment_cards(self) -> None:
+        note_id = self.add_note(title="С файлами", attachments="plan.pdf, note.txt")
+
+        _, html = self.body(f"/note/{note_id}")
+
+        self.assertIn("attachment-cards", html)
+        self.assertIn("attachment-card--pdf", html)
+        self.assertIn("attachment-card--text", html)
+        self.assertIn("/attachment/plan.pdf", html)
+        self.assertIn('target="_blank"', html)
+        self.assertIn("PDF", html)  # подпись расширения видна пользователю
+
+    def test_index_links_attachments_to_preview(self) -> None:
+        self.add_note(title="С файлами", attachments="plan.pdf")
+
+        _, html = self.body("/")
+
+        self.assertIn("/attachment/plan.pdf", html)
+        self.assertIn("chip chip--file", html)
+
+    def test_unavailable_attachment_is_marked(self) -> None:
+        note_id = self.add_note(title="Без файла", attachments="ghost.pdf")
+
+        _, html = self.body(f"/note/{note_id}")
+
+        self.assertIn("attachment-card--missing", html)
+        self.assertIn("Нет файла", html)
+
+
+class AttachmentFormTest(WebTestCase):
+    """Поле вложений заполняется только выбором файлов, без ручного ввода."""
+
+    def test_no_manual_text_input_for_attachments(self) -> None:
+        _, html = self.body("/")
+
+        self.assertNotIn('placeholder="путь/имя через запятую"', html)
+        self.assertIn('type="hidden"', html)
+        self.assertIn('name="attachments"', html)
+        self.assertIn('type="file"', html)
+        self.assertIn("Выбрать файлы", html)
+
+    def test_edit_form_lists_existing_attachments_as_chips(self) -> None:
+        note_id = self.add_note(title="С файлами", attachments="plan.pdf")
+
+        _, html = self.body(f"/note/{note_id}")
+
+        self.assertIn('class="attachment-list"', html)
+        self.assertIn('data-name="plan.pdf"', html)
+        self.assertIn("attachment-chip__remove", html)
+
+    def test_upload_and_kept_chips_merge_without_duplicates(self) -> None:
+        self.client.post(
+            "/add",
+            data={
+                "title": "Микс",
+                "attachments": "a.txt,photo.png",
+                "attachment_files": (BytesIO(b"data"), "photo.png"),
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(self.stored()[0].attachments, ["a.txt", "photo.png"])
+
+    def test_removing_chip_clears_attachment_list(self) -> None:
+        """Крестик в чипе = пустое скрытое поле: вложение уходит из заметки."""
+        note_id = self.add_note(title="Заметка", attachments="a.txt")
+        self.dismiss_flash()
+
+        self.client.post(
+            f"/edit/{note_id}",
+            data={"title": "Заметка", "content": "", "attachments": ""},
+        )
+
+        self.assertEqual(self.stored()[0].attachments, [])
 
 
 class IntegrationWithCoreTest(WebTestCase):

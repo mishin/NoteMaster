@@ -263,7 +263,7 @@ body {
     display: flex;
     align-items: center;
     gap: .5rem;
-    margin-top: .35rem;
+    margin-top: .5rem;
     flex-wrap: wrap;
 }
 .file-picker__input { display: none; }
@@ -271,6 +271,73 @@ body {
     font-size: .8rem;
     color: var(--c-muted);
 }
+
+/* Чипы вложений в форме: имя файла + крестик */
+.attachment-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-top: .5rem;
+}
+.attachment-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    max-width: 100%;
+    padding: .3rem .35rem .3rem .6rem;
+    border: 1.5px solid var(--c-border);
+    border-radius: 999px;
+    background: var(--c-white);
+    font-size: .8rem;
+    color: var(--c-text);
+    box-shadow: var(--shadow);
+    transition: border-color var(--transition), box-shadow var(--transition),
+                transform var(--transition);
+    animation: chipIn .2s ease;
+}
+.attachment-chip:hover {
+    border-color: var(--c-orange);
+    box-shadow: var(--shadow-h);
+    transform: translateY(-1px);
+}
+.attachment-chip--new {
+    border-color: var(--c-lime);
+    background: #f7fbe9;
+}
+.attachment-chip__icon { font-size: .95em; line-height: 1; }
+.attachment-chip__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 240px;
+}
+.attachment-chip__name--preview {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+.attachment-chip__name--preview:hover { color: var(--c-orange); }
+.attachment-chip__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 50%;
+    background: var(--c-light);
+    color: var(--c-muted);
+    font-size: .95rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition);
+}
+.attachment-chip__remove:hover {
+    background: #ffebee;
+    color: var(--c-error);
+}
+
+@keyframes chipIn { from { opacity: 0; transform: scale(.92); } }
 
 /* ── Notes Grid ───────────────────────────────────────────── */
 .notes-grid {
@@ -367,12 +434,100 @@ body {
 }
 .note-detail__empty { color: var(--c-muted); font-style: italic; margin-bottom: 1rem; }
 
+.note-detail__attachments { margin-bottom: 1.25rem; }
 .note-detail__attachments h3 {
     font-size: .9rem;
     font-weight: 600;
-    margin-bottom: .4rem;
+    margin-bottom: .5rem;
 }
-.note-detail__attachments ul { list-style: none; display: flex; flex-wrap: wrap; gap: .3rem; }
+.note-detail__count { color: var(--c-muted); font-weight: 400; }
+.note-detail__attachments-hint {
+    font-size: .78rem;
+    color: var(--c-muted);
+    margin-top: .5rem;
+}
+
+/* Карточки вложений: объект, по которому можно кликнуть */
+.attachment-cards {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: .6rem;
+}
+.attachment-card {
+    border: 1.5px solid var(--c-border);
+    border-radius: var(--radius-sm);
+    background: var(--c-white);
+    transition: border-color var(--transition), box-shadow var(--transition),
+                transform var(--transition);
+}
+.attachment-card:hover {
+    border-color: var(--c-orange);
+    box-shadow: var(--shadow-h);
+    transform: translateY(-2px);
+}
+.attachment-card__link {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .6rem .7rem;
+    text-decoration: none;
+    color: inherit;
+}
+.attachment-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    border-radius: var(--radius-sm);
+    background: var(--c-light);
+    font-size: 1.05rem;
+}
+.attachment-card--image .attachment-card__icon { background: #eafaf1; }
+.attachment-card--pdf   .attachment-card__icon { background: #ffebee; }
+.attachment-card--text  .attachment-card__icon { background: #fff8dc; }
+.attachment-card--doc   .attachment-card__icon { background: #e3f2fd; }
+.attachment-card--archive .attachment-card__icon { background: #fff3e0; }
+.attachment-card--audio .attachment-card__icon { background: #f3e5f5; }
+.attachment-card--video .attachment-card__icon { background: #e0f7fa; }
+
+.attachment-card__body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+.attachment-card__name {
+    font-size: .85rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.attachment-card:hover .attachment-card__name { color: var(--c-orange); }
+.attachment-card__meta { font-size: .75rem; color: var(--c-muted); }
+.attachment-card__ext {
+    display: inline-block;
+    padding: 0 .35rem;
+    border-radius: 4px;
+    background: var(--c-light);
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .03em;
+    color: var(--c-muted);
+}
+.attachment-card__action {
+    margin-left: auto;
+    font-size: .75rem;
+    color: var(--c-muted);
+    white-space: nowrap;
+    transition: color var(--transition);
+}
+.attachment-card:hover .attachment-card__action { color: var(--c-orange); }
+.attachment-card--missing { border-style: dashed; }
+.attachment-card--missing .attachment-card__action { color: var(--c-warning); }
 
 .note-detail__footer {
     margin-top: 1.25rem;
@@ -404,8 +559,33 @@ body {
     white-space: nowrap;
 }
 .chip--file {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    max-width: 100%;
     background: #fff3e0;
     color: #e65100;
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background var(--transition), color var(--transition),
+                box-shadow var(--transition);
+}
+.chip--file:hover {
+    background: var(--c-orange);
+    color: var(--c-white);
+    box-shadow: var(--shadow);
+}
+.chip__icon { font-size: .9em; line-height: 1; }
+.chip--missing {
+    background: var(--c-light);
+    color: var(--c-muted);
+    border: 1px dashed var(--c-border);
+}
+.chip--missing:hover {
+    background: var(--c-light);
+    color: var(--c-warning);
+    box-shadow: none;
 }
 
 /* ── Empty State ──────────────────────────────────────────── */

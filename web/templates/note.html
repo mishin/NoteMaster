@@ -25,12 +25,34 @@
 
     {% if note.attachments %}
     <section class="note-detail__attachments">
-        <h3>Вложения</h3>
-        <ul>
+        <h3>Вложения <span class="note-detail__count">({{ note.attachments|length }})</span></h3>
+        <ul class="attachment-cards">
             {% for attachment in note.attachments %}
-            <li class="chip chip--file">{{ attachment }}</li>
+            {% set meta = attachment_meta(attachment) %}
+            <li class="attachment-card attachment-card--{{ meta.kind }}{% if not meta.available %} attachment-card--missing{% endif %}">
+                <a class="attachment-card__link"
+                   href="{{ meta.url }}"
+                   target="_blank"
+                   rel="noopener"
+                   title="{{ meta.name }}">
+                    <span class="attachment-card__icon" aria-hidden="true">{{ meta.icon }}</span>
+                    <span class="attachment-card__body">
+                        <span class="attachment-card__name">{{ meta.label }}</span>
+                        <span class="attachment-card__meta">
+                            <span class="attachment-card__ext">{{ meta.extension }}</span>
+                            {%- if meta.size %} · {{ meta.size }}{% endif -%}
+                        </span>
+                    </span>
+                    <span class="attachment-card__action">
+                        {%- if meta.available %}Открыть{% else %}Нет файла{% endif -%}
+                    </span>
+                </a>
+            </li>
             {% endfor %}
         </ul>
+        <p class="note-detail__attachments-hint">
+            Клик по карточке открывает файл в новой вкладке браузера.
+        </p>
     </section>
     {% endif %}
 
